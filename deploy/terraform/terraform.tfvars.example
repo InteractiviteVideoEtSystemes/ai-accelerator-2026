@@ -1,0 +1,36 @@
+# Copy this file to terraform.tfvars and adjust values.
+# terraform.tfvars is gitignored because it may contain subscription IDs.
+
+# --- Azure identity (optional; defaults to your `az login` context) ---
+# subscription_id = "e670f156-da08-4a6d-b9fe-6a61388e8fd4"
+# tenant_id       = "dda7df9a-8948-410e-8cd6-c830a3370b09"
+
+# --- Location / naming ---
+location    = "francecentral"
+prefix      = "aiaccel"
+environment = "dev"
+
+# --- AKS sizing ---
+aks_node_count   = 2
+aks_node_vm_size = "Standard_D2s_v5"
+
+# --- ACR ---
+acr_sku = "Basic"
+
+# --- Rollout toggles ---
+# Recommended first apply: platform + Temporal + Supabase, app disabled until
+# the images have been pushed to the ACR.
+enable_temporal = true
+enable_supabase = true
+enable_app      = false
+
+# Set to true to have Terraform run `az acr build` for the app images.
+build_and_push_images = false
+
+# --- App images (within the ACR) ---
+frontend_image_repository = "frontend"
+worker_image_repository   = "temporal-worker"
+image_tag                 = "dev-latest"
+
+# --- Optional public Supabase URL (once DNS/ingress is configured) ---
+# supabase_public_url = "https://supabase.dev.example.com"

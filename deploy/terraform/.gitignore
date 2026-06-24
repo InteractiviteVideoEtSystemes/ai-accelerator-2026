@@ -1,0 +1,17 @@
+# Terraform state (local backend)
+*.tfstate
+*.tfstate.*
+.terraform/
+# NOTE: .terraform.lock.hcl SHOULD be committed (provider version pinning).
+
+# Variable files may contain secrets / subscription IDs
+terraform.tfvars
+*.auto.tfvars
+
+# Generated kubeconfig
+kubeconfig
+*.kubeconfig
+
+# Crash logs
+crash.log
+crash.*.log
