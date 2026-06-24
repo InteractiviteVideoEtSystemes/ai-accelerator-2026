@@ -1,7 +1,7 @@
 /**
  * AiSummarizer - interactive component for the AI document summarization feature.
  *
- * Flow: pick a French .pdf/.docx/.txt (<=512 KB) -> upload to the private
+ * Flow: pick a French .pdf/.docx/.odt/.txt (<=512 KB) -> upload to the private
  * `documents` Storage bucket -> POST to the `summaries` Edge Function -> poll its
  * status until `completed`/`failed` -> render the English summary.
  *
@@ -22,11 +22,27 @@ const MAX_BYTES = 512 * 1024; // 512 KB
 const BUCKET = 'documents';
 const POLL_MS = 2500;
 
+const ODT_MIME = 'application/vnd.oasis.opendocument.text';
+
 const ALLOWED: Record<string, string> = {
   'application/pdf': '.pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  [ODT_MIME]: '.odt',
   'text/plain': '.txt',
 };
+
+// Browsers may report an empty or generic MIME type for ODT files. When the
+// declared type is empty or a generic fallback (application/octet-stream) and
+// the filename ends with .odt, treat it as the canonical ODT type so the upload
+// and Edge Function receive the right value. A conflicting non-ODT MIME type is
+// never overridden by the filename alone.
+const GENERIC_MIME_TYPES = new Set(['', 'application/octet-stream']);
+
+function resolvedMimeType(file: File): string {
+  if (ALLOWED[file.type]) return file.type;
+  if (GENERIC_MIME_TYPES.has(file.type) && file.name.toLowerCase().endsWith('.odt')) return ODT_MIME;
+  return file.type;
+}
 
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ||
@@ -83,8 +99,10 @@ export function AiSummarizer() {
     setClientError(null);
     const selected = e.target.files?.[0] ?? null;
     if (selected) {
-      if (!ALLOWED[selected.type]) {
-        setClientError('Unsupported file type. Use a PDF, DOCX, or TXT document.');
+      const mimeOk = ALLOWED[selected.type] ||
+        (GENERIC_MIME_TYPES.has(selected.type) && selected.name.toLowerCase().endsWith('.odt'));
+      if (!mimeOk) {
+        setClientError('Unsupported file type. Use a PDF, DOCX, ODT, or TXT document.');
         setFile(null);
         return;
       }
@@ -124,10 +142,11 @@ export function AiSummarizer() {
     setRecord(null);
     setCopied(false);
     try {
+      const mimeType = resolvedMimeType(file);
       const path = `${crypto.randomUUID()}/${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
-        .upload(path, file, { contentType: file.type, upsert: false });
+        .upload(path, file, { contentType: mimeType, upsert: false });
       if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
       const res = await fetch(`${API_BASE}/summaries`, {
@@ -136,7 +155,7 @@ export function AiSummarizer() {
         body: JSON.stringify({
           storage_path: path,
           original_filename: file.name,
-          mime_type: file.type,
+          mime_type: mimeType,
           size_bytes: file.size,
         }),
       });
@@ -188,12 +207,12 @@ export function AiSummarizer() {
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <label htmlFor="ai-doc" className="text-sm font-medium">
-            Document (PDF, DOCX, or TXT &middot; max 512 KB)
+            Document (PDF, DOCX, ODT, or TXT &middot; max 512 KB)
           </label>
           <Input
             id="ai-doc"
             type="file"
-            accept=".pdf,.docx,.txt"
+            accept=".pdf,.docx,.odt,.txt"
             onChange={onFileChange}
             disabled={busy || isActive}
           />

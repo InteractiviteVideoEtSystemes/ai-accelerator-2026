@@ -11,6 +11,7 @@ export const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
+  "application/vnd.oasis.opendocument.text",
 ]);
 
 // Minimal structural type for the slice of the supabase-js client we use. This
