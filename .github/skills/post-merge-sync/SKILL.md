@@ -3,7 +3,8 @@ name: post-merge-sync
 description: >-
   Guide la mise à jour sûre du dépôt local après qu'une pull request a été
   validée et mergée par un humain, puis nettoie la branche locale et la branche
-  distante restée ouverte quand c'est sans risque.
+  distante restée ouverte quand c'est sans risque, et redéploie la stack locale
+  pour constater la nouvelle fonctionnalité.
 user-invocable: true
 ---
 
@@ -14,9 +15,12 @@ Tu aides l'utilisateur après ce scénario :
 - une pull request a été relue, validée, puis mergée par un humain ;
 - la branche distante de la PR existe encore ;
 - le dépôt local est encore sur l'ancienne branche ou n'est pas à jour.
+- l'utilisateur veut redéployer l'application localement pour constater la
+  fonctionnalité mergée.
 
 Ton objectif est de proposer et appliquer les bonnes pratiques de mise à jour du
-dépôt local, sans perdre de travail local.
+dépôt local, sans perdre de travail local, puis de redéployer la stack locale
+pour permettre à l'utilisateur de vérifier la fonctionnalité mergée.
 
 ## Entrée
 
@@ -49,6 +53,9 @@ une seule question de clarification.
 - Utiliser `git pull --ff-only` pour éviter les merges locaux accidentels.
 - Préférer `git branch -d` à `git branch -D`; si `-d` refuse, investiguer au
   lieu de forcer.
+- Ne pas lancer de reset destructif de la stack (`make reset`, suppression de
+  volumes, `supabase stop --no-backup`) uniquement pour constater une
+  fonctionnalité, sauf demande explicite de l'utilisateur.
 
 ## Bonnes pratiques à appliquer
 
@@ -164,13 +171,93 @@ git push origin --delete <merged-branch>
 Si GitHub indique que la branche distante n'existe déjà plus, considère cela
 comme un état final acceptable.
 
-### 8. Nettoyer les références distantes et vérifier
+### 8. Redéployer la stack locale pour constater la fonctionnalité
+
+Après la mise à jour de la branche par défaut et le nettoyage des branches,
+redéploie la stack locale pour que le code mergé soit réellement visible.
+
+Commence par identifier les surfaces touchées par la PR :
+
+```powershell
+gh pr view <pr-number-or-url> --json files --jq '.files[].path'
+```
+
+Puis applique le redéploiement le moins destructif possible :
+
+1. Vérifier que Docker répond :
+   ```powershell
+   docker info
+   ```
+   Si Docker ne répond pas, arrêter et demander à l'utilisateur de lancer Docker
+   Desktop.
+
+2. Si `.env` est absent, le créer depuis les valeurs d'exemple :
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+3. Si la PR touche `frontend/` ou `temporal/`, reconstruire les images applicatives
+   concernées avant de recréer les conteneurs :
+   ```powershell
+   docker compose -f docker-compose.yml build frontend temporal-worker
+   ```
+   Si seule une surface est touchée, tu peux reconstruire uniquement le service
+   correspondant.
+
+4. Si la PR touche `supabase/functions/`, redémarrer Supabase via la CLI pour que
+   les fonctions locales soient rechargées :
+   ```powershell
+   supabase stop
+   supabase start
+   ```
+
+5. Démarrer ou recréer la stack :
+   ```powershell
+   make up
+   ```
+
+   Sur Windows, si `make up` échoue à cause du script shell
+   `scripts/supabase-env.sh` ou d'une injection de clés Supabase, utiliser le
+   fallback PowerShell non destructif :
+
+   ```powershell
+   supabase start
+   $envLines = supabase status -o env
+   foreach ($line in $envLines) {
+     if ($line -match '^([^=]+)=(.*)$') {
+       Set-Item -Path "Env:$($matches[1])" -Value $matches[2]
+     }
+   }
+   docker compose -f docker-compose.yml up -d --force-recreate
+   ```
+
+6. Vérifier que les services répondent :
+   ```powershell
+   docker compose -f docker-compose.yml ps
+   supabase status
+   Invoke-WebRequest http://localhost:3000 -UseBasicParsing
+   Invoke-WebRequest http://localhost:8080 -UseBasicParsing
+   Invoke-WebRequest http://localhost:54321/rest/v1/ -UseBasicParsing
+   ```
+
+7. Indiquer à l'utilisateur où constater la fonctionnalité :
+   - frontend : `http://localhost:3000` ;
+   - route fonctionnelle connue si elle est évidente depuis la PR ou les specs ;
+   - sinon, préciser que la stack est à jour et prête pour vérification manuelle.
+
+Si un composant ne démarre pas, ne fais pas de correction destructive
+automatique. Collecte les symptômes (`docker compose ps`, `make logs`,
+`make logs-frontend`, `make logs-temporal`, `supabase status`) et demande une
+décision si la réparation nécessite reset, suppression de volume ou rollback.
+
+### 9. Nettoyer les références distantes et vérifier
 
 ```powershell
 git fetch --prune origin
 git --no-pager status --short
 git branch -vv
 gh pr view <pr-number-or-url> --json number,state,mergedAt,headRefName,url
+docker compose -f docker-compose.yml ps
 ```
 
 La fin attendue :
@@ -179,6 +266,8 @@ La fin attendue :
 - branche par défaut à jour avec `origin/<default-branch>` ;
 - branche locale de PR supprimée ;
 - branche distante de PR supprimée ou déjà absente ;
+- stack locale redéployée avec le code mergé ;
+- frontend local accessible pour constater la fonctionnalité ;
 - aucun changement local non traité.
 
 ## Cas particuliers
@@ -224,5 +313,7 @@ Réponds en français avec :
 - la branche locale courante finale ;
 - si la branche locale a été supprimée ;
 - si la branche distante a été supprimée ou était déjà absente ;
+- si la stack locale a été redéployée ;
+- les URLs locales à utiliser pour constater la fonctionnalité ;
 - les commandes importantes exécutées ;
 - tout point bloquant ou action manuelle restante.
