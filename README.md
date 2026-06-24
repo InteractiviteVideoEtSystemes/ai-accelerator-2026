@@ -4,7 +4,7 @@
 > run regenerates this branch. The machine-readable source of truth is [`runs.jsonl`](./runs.jsonl).
 > Deployed-environment E2E trends live separately on the [`e2e-history`](../../tree/e2e-history) branch.
 
-**Last updated:** 2026-06-24 18:55Z · 10 records · suites: `helm`, `seed`, `temporal`
+**Last updated:** 2026-06-24 19:30Z · 13 records · suites: `helm`, `seed`, `temporal`
 
 ![trend](./trend.svg)
 
@@ -12,17 +12,20 @@
 
 | Suite | Latest | When (UTC) | Pass 24h | Pass 7d | Green streak | Runs |
 |---|---|---|--:|--:|--:|--:|
-| `helm` | ❌ `failed` [↗](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28122276750) | — | — | — | 0 | 4 |
-| `seed` | ❌ `failed` [↗](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28122276750) | — | — | — | 0 | 4 |
-| `temporal` | ✅ `passed` [↗](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28122276750) | 2026-06-24 18:55Z | 100% (2) | 100% (2) | 2 | 2 |
+| `helm` | ❌ `failed` [↗](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28124226896) | — | — | — | 0 | 5 |
+| `seed` | ❌ `failed` [↗](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28124226896) | — | — | — | 0 | 5 |
+| `temporal` | ✅ `passed` [↗](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28124226896) | 2026-06-24 19:30Z | 100% (3) | 100% (3) | 3 | 3 |
 
 
 ## Recent runs
 
 | When (UTC) | Suite | Result | Pass | Fail | Skip | Duration | Commit | Run |
 |---|---|---|--:|--:|--:|--:|---|---|
+| 2026-06-24 19:30Z | `temporal` | ✅ passed | 52 | 0 | 0 | 1.9s | `a66d5c8` | [#5](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28124226896) |
 | 2026-06-24 18:55Z | `temporal` | ✅ passed | 52 | 0 | 0 | 2.2s | `60d291a` | [#4](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28122276750) |
 | 2026-06-24 17:29Z | `temporal` | ✅ passed | 11 | 0 | 0 | 0.0s | `80f7585` | [#3](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28117176926) |
+| — | `seed` | ❌ failed | 0 | 1 | 0 | — | `a66d5c8` | [#5](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28124226896) |
+| — | `helm` | ❌ failed | 151 | 2 | 0 | — | `a66d5c8` | [#5](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28124226896) |
 | — | `seed` | ❌ failed | 0 | 1 | 0 | — | `60d291a` | [#4](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28122276750) |
 | — | `helm` | ❌ failed | 151 | 2 | 0 | — | `60d291a` | [#4](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28122276750) |
 | — | `seed` | ❌ failed | 0 | 1 | 0 | — | `80f7585` | [#3](https://github.com/InteractiviteVideoEtSystemes/ai-accelerator-2026/actions/runs/28117176926) |
