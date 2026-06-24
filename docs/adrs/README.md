@@ -17,11 +17,13 @@ Architectural decisions (data model, orchestration engine, deployment topology, 
 
 ## Index
 
-No ADRs recorded yet. Add a row per decision as you accept it.
-
 | ADR | Title | Status |
 |---|---|---|
-| [0001](./0001-example-slug.md) | _First decision title_ | Proposed |
+| [0001](./0001-provision-azure-infrastructure-with-terraform.md) | Provision Azure infrastructure with Terraform (local state) | Accepted |
+| [0002](./0002-aks-deployment-topology-with-in-cluster-supabase-and-temporal.md) | Deploy on AKS with in-cluster Supabase and Temporal | Accepted |
+| [0003](./0003-orchestrate-ai-summarization-with-temporal-workflow.md) | Orchestrate AI document summarization with a Temporal workflow | Accepted |
+| [0004](./0004-use-anthropic-claude-for-document-summarization.md) | Use Claude Sonnet 4.6 via Azure for FR→EN document summarization | Accepted |
+| [0005](./0005-supabase-edge-function-summarization-entry-point.md) | Use a Supabase Edge Function as the summarization entry point | Accepted |
 
 ## Maintenance note
 
