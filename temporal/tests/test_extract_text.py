@@ -7,11 +7,13 @@ page-joining logic without bundling a binary PDF fixture.
 from __future__ import annotations
 
 import io
+import zipfile
 
 import pytest
 
 from src.activities.summarization import (
     DOCX_MIME,
+    ODT_MIME,
     PDF_MIME,
     TXT_MIME,
     extract_text_from_bytes,
@@ -102,3 +104,76 @@ def test_extract_malformed_pdf_raises():
     # pypdf parser is exercised here.
     with pytest.raises(Exception):
         extract_text_from_bytes(b"this is not a pdf", PDF_MIME, "broken.pdf")
+
+
+# ---------------------------------------------------------------------------
+# ODT extraction tests
+# ---------------------------------------------------------------------------
+
+def _build_odt(content_xml: str) -> bytes:
+    """Return in-memory ODT bytes (a ZIP) containing the given content.xml."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("content.xml", content_xml)
+    return buf.getvalue()
+
+
+_MINIMAL_CONTENT_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Premier paragraphe</text:p>
+      <text:h>Titre de section</text:h>
+      <text:p>Deuxième paragraphe</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>
+"""
+
+
+def test_extract_odt_paragraph_and_heading_text():
+    """Paragraphs and headings are extracted; boundaries are preserved as newlines."""
+    data = _build_odt(_MINIMAL_CONTENT_XML)
+    text = extract_text_from_bytes(data, ODT_MIME, "doc.odt")
+
+    assert "Premier paragraphe" in text
+    assert "Titre de section" in text
+    assert "Deuxième paragraphe" in text
+    # Boundaries: each block must be on its own line.
+    lines = text.splitlines()
+    assert "Premier paragraphe" in lines
+    assert "Titre de section" in lines
+    assert "Deuxième paragraphe" in lines
+
+
+def test_extract_odt_by_filename_extension_fallback():
+    """Generic MIME with an .odt filename routes to the ODT extractor."""
+    data = _build_odt(_MINIMAL_CONTENT_XML)
+    # application/octet-stream is a common generic fallback reported by some OSes.
+    text = extract_text_from_bytes(data, "application/octet-stream", "rapport.odt")
+    assert "Premier paragraphe" in text
+
+
+def test_extract_odt_not_a_zip_raises():
+    """Bytes that are not a valid ZIP raise ValueError (not silently return empty)."""
+    with pytest.raises(ValueError, match="ODT file is not a valid ZIP"):
+        extract_text_from_bytes(b"this is definitely not a zip", ODT_MIME, "bad.odt")
+
+
+def test_extract_odt_missing_content_xml_raises():
+    """A valid ZIP that lacks content.xml raises ValueError."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("styles.xml", "<root/>")
+    with pytest.raises(ValueError, match="missing content.xml"):
+        extract_text_from_bytes(buf.getvalue(), ODT_MIME, "no_content.odt")
+
+
+def test_extract_odt_malformed_xml_raises():
+    """A ZIP with broken XML in content.xml raises ValueError."""
+    data = _build_odt("<<not valid xml>>")
+    with pytest.raises(ValueError, match="not valid XML"):
+        extract_text_from_bytes(data, ODT_MIME, "broken_xml.odt")

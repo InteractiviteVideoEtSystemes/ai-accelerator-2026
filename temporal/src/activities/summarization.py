@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
+import xml.etree.ElementTree as ET
 
 PDF_MIME = "application/pdf"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 TXT_MIME = "text/plain"
+ODT_MIME = "application/vnd.oasis.opendocument.text"
 
 # French civility titles that commonly precede a person's name. Used for a
 # deterministic, best-effort name redaction pass (defense-in-depth alongside the
@@ -38,7 +41,7 @@ def redact_personal_names(text: str) -> str:
 
 
 def extract_text_from_bytes(data: bytes, mime_type: str, filename: str = "") -> str:
-    """Extract UTF-8 text from PDF, DOCX, or plain-text bytes."""
+    """Extract UTF-8 text from PDF, DOCX, ODT, or plain-text bytes."""
     if mime_type == TXT_MIME or filename.lower().endswith(".txt"):
         return data.decode("utf-8", errors="replace")
 
@@ -55,7 +58,49 @@ def extract_text_from_bytes(data: bytes, mime_type: str, filename: str = "") -> 
         document = Document(io.BytesIO(data))
         return "\n".join(p.text for p in document.paragraphs).strip()
 
+    if mime_type == ODT_MIME or filename.lower().endswith(".odt"):
+        return _extract_text_from_odt(data)
+
     raise ValueError(f"Unsupported mime_type for extraction: {mime_type}")
+
+
+def _extract_text_from_odt(data: bytes) -> str:
+    """Extract human-readable text from an ODT (OpenDocument Text) file.
+
+    ODT files are ZIP archives containing ``content.xml``. Text lives in
+    ``<text:p>`` (paragraph) and ``<text:h>`` (heading) elements inside that
+    XML.  Style and metadata nodes are ignored.  Raises ``ValueError`` for
+    malformed ZIP/XML or when no extractable text is found.
+    """
+    _ODT_NS = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    _TEXT_TAGS = {f"{{{_ODT_NS}}}p", f"{{{_ODT_NS}}}h"}
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            try:
+                xml_bytes = zf.read("content.xml")
+            except KeyError:
+                raise ValueError("ODT file is missing content.xml")
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"ODT file is not a valid ZIP archive: {exc}") from exc
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as exc:
+        raise ValueError(f"ODT content.xml is not valid XML: {exc}") from exc
+
+    paragraphs: list[str] = []
+    for elem in root.iter():
+        if elem.tag in _TEXT_TAGS:
+            # Concatenate all text() and tail() within the element tree.
+            text = "".join(elem.itertext()).strip()
+            if text:
+                paragraphs.append(text)
+
+    if not paragraphs:
+        raise ValueError("No extractable text found in ODT file")
+
+    return "\n".join(paragraphs)
 
 
 def chunk_text(text: str, max_bytes: int) -> list[str]:

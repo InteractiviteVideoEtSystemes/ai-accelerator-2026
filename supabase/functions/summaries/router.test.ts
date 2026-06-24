@@ -186,6 +186,37 @@ Deno.test("POST create: unsupported mime_type returns 400", async () => {
   assertStringIncludes((await res.json()).error, "Unsupported mime_type");
 });
 
+Deno.test(
+  "POST create: ODT mime_type returns 201 and inserts the full expected row",
+  async () => {
+    const ODT_MIME = "application/vnd.oasis.opendocument.text";
+    const { db, calls } = makeFakeDb([
+      { data: { id: "odt-abc", status: "uploaded" } },
+    ]);
+    const handle = createRouter(db);
+    const res = await handle(
+      postCreate({
+        storage_path: "documents/odt-abc/rapport.odt",
+        original_filename: "rapport.odt",
+        mime_type: ODT_MIME,
+        size_bytes: 8192,
+      }),
+    );
+    assertEquals(res.status, 201);
+    const json = await res.json();
+    assertEquals(json.id, "odt-abc");
+    assertEquals(calls.from, ["document_summaries"]);
+    // The insert must carry the canonical ODT MIME — a regression dropping or
+    // remapping it would break worker routing downstream.
+    assertEquals(calls.inserts[0], {
+      storage_path: "documents/odt-abc/rapport.odt",
+      original_filename: "rapport.odt",
+      mime_type: ODT_MIME,
+      status: "uploaded",
+    });
+  },
+);
+
 Deno.test("POST create: oversized file returns 413", async () => {
   const { db } = makeFakeDb([]);
   const res = await createRouter(db)(
