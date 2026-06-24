@@ -24,6 +24,7 @@ import {
   Alert,
   Skeleton,
   Badge,
+  AiSummarizer,
 } from '@/components/engine';
 
 /**
@@ -57,6 +58,9 @@ export function createDefaultRegistry(): ComponentRegistry {
 
     // Data
     Badge,
+
+    // AI
+    AiSummarizer,
   });
 
   return registry;

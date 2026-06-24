@@ -76,6 +76,15 @@ services:
       - TEMPORAL_TASK_QUEUE=${TEMPORAL_TASK_QUEUE:-main}
       - SUPABASE_URL=${SUPABASE_URL:-http://host.docker.internal:54321}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-dev-service-role-key}
+      # AI document summarization (Claude Sonnet 4.6 via Azure AI Foundry). Secrets come
+      # from .env; never commit real values. With AZURE_AI_API_KEY unset,
+      # summarization requests fail cleanly (status=failed) but the rest of the
+      # stack runs normally.
+      - AI_SUMMARIZATION_ENABLED=${AI_SUMMARIZATION_ENABLED:-true}
+      - AZURE_AI_INFERENCE_ENDPOINT=${AZURE_AI_INFERENCE_ENDPOINT:-}
+      - AZURE_AI_API_KEY=${AZURE_AI_API_KEY:-}
+      - AZURE_ANTHROPIC_API_VERSION=${AZURE_ANTHROPIC_API_VERSION:-2025-04-01-preview}
+      - AZURE_AI_SUMMARY_DEPLOYMENT=${AZURE_AI_SUMMARY_DEPLOYMENT:-claude-sonnet-4-6}
 
   frontend:
     build:

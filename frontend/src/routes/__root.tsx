@@ -5,7 +5,7 @@
 import { createRootRoute, Outlet, Link, useLocation } from '@tanstack/react-router';
 import { TanStackRouterDevtools } from '@tanstack/router-devtools';
 import { cn } from '@/lib/utils';
-import { Home, Box, Users, Building2, FolderOpen, FileQuestion, ClipboardCheck, FileText, UserCircle, UsersRound } from 'lucide-react';
+import { Home, Box, Users, Building2, FolderOpen, FileQuestion, ClipboardCheck, FileText, UserCircle, UsersRound, Sparkles } from 'lucide-react';
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -88,6 +88,26 @@ function Sidebar() {
             <NavLink to="question" icon={FileQuestion} label="Questions" />
             <NavLink to="person" icon={UserCircle} label="People" />
             <NavLink to="evidence" icon={FileText} label="Evidence" />
+          </div>
+        </div>
+
+        <div className="pt-4">
+          <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            AI Summarizing
+          </h3>
+          <div className="mt-2 space-y-1">
+            <Link
+              to="/tools/summarize"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg transition-colors',
+                location.pathname === '/tools/summarize'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted'
+              )}
+            >
+              <Sparkles className="h-4 w-4" />
+              Summarize Document
+            </Link>
           </div>
         </div>
       </nav>

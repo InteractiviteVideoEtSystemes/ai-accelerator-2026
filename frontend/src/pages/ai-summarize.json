@@ -1,0 +1,31 @@
+{
+  "id": "ai-summarize",
+  "title": "AI Summarizing",
+  "state": {},
+  "layout": {
+    "type": "Stack",
+    "props": { "spacing": 6 },
+    "children": [
+      {
+        "type": "Stack",
+        "props": { "spacing": 1 },
+        "children": [
+          {
+            "type": "Heading",
+            "props": { "level": 1, "children": "AI Summarizing" }
+          },
+          {
+            "type": "Text",
+            "props": {
+              "variant": "muted",
+              "children": "Upload a French document (PDF, DOCX, or TXT, max 512 KB) and get a concise English summary. Names mentioned in the document are removed."
+            }
+          }
+        ]
+      },
+      {
+        "type": "AiSummarizer"
+      }
+    ]
+  }
+}

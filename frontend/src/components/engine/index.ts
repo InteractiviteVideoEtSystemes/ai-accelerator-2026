@@ -30,3 +30,6 @@ export { EngineSkeleton as Skeleton } from './feedback/EngineSkeleton';
 
 // Data
 export { EngineBadge as Badge } from './data/EngineBadge';
+
+// AI
+export { AiSummarizer } from './ai/AiSummarizer';
