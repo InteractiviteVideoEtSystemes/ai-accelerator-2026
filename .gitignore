@@ -37,6 +37,11 @@ temporal/worker/node_modules.bak*
 **/node_modules.bak*
 *.swp
 
+# Playwright / test output
+frontend/test-results/
+frontend/e2e-results/
+frontend/playwright-report/
+
 volaris_test_data-main
 
 *.txt
