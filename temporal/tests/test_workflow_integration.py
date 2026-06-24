@@ -57,11 +57,25 @@ class _FakeClient:
 
 @pytest.fixture
 def fake_boundaries(monkeypatch):
-    """In-memory Supabase store + mocked Azure/Claude HTTP; returns the store."""
+    """In-memory Supabase + mocked Azure/Claude HTTP.
+
+    Returns a recorder exposing: ``store`` (final row state per id), ``updates``
+    (ordered list of (request_id, fields) for every write), and ``claude_inputs``
+    (every user prompt sent to Claude) so tests can assert transition order and
+    that redacted text -- not the raw name -- reaches the model.
+    """
     store: dict[str, dict] = {}
+    updates: list[tuple[str, dict]] = []
+    claude_inputs: list[str] = []
 
     def fake_update_row(request_id, fields):
+        updates.append((request_id, dict(fields)))
         store.setdefault(request_id, {}).update(fields)
+
+    class _RecordingClient(_FakeClient):
+        def post(self, url, headers=None, json=None):
+            claude_inputs.append(json["messages"][0]["content"])
+            return _FakeResponse()
 
     monkeypatch.setattr(supabase_rest, "update_row", fake_update_row)
     monkeypatch.setattr(
@@ -69,12 +83,20 @@ def fake_boundaries(monkeypatch):
         "download_object",
         lambda path: "Le rapport de Monsieur Jean Dupont est complet et détaillé.".encode("utf-8"),
     )
-    monkeypatch.setattr(httpx, "Client", _FakeClient)
+    monkeypatch.setattr(httpx, "Client", _RecordingClient)
     monkeypatch.setattr(settings, "azure_ai_inference_endpoint", "https://example.azure.com/")
     monkeypatch.setattr(settings, "azure_ai_api_key", "secret-key")
     monkeypatch.setattr(settings, "summarization_max_input_bytes", 524288)
     monkeypatch.setattr(settings, "summarization_chunk_threshold_bytes", 131072)
-    return store
+
+    class _Recorder:
+        pass
+
+    rec = _Recorder()
+    rec.store = store
+    rec.updates = updates
+    rec.claude_inputs = claude_inputs
+    return rec
 
 
 async def _run(env: WorkflowEnvironment, data: SummarizeDocumentInput) -> dict:
@@ -106,10 +128,21 @@ async def test_workflow_completes_and_persists_summary(fake_boundaries):
         )
 
     assert result["status"] == "completed"
-    row = fake_boundaries["req-ok"]
+    row = fake_boundaries.store["req-ok"]
     assert row["status"] == "completed"
     assert row["summary"] == "An English summary."
     assert row["extracted_char_count"] > 0
+
+    # The status must progress in the documented order, not jump straight to done.
+    statuses = [fields["status"] for (_id, fields) in fake_boundaries.updates if "status" in fields]
+    assert statuses == ["extracting", "summarizing", "completed"]
+
+    # The redacted text -- never the raw personal name -- must reach Claude.
+    assert fake_boundaries.claude_inputs, "Claude was never called"
+    sent = fake_boundaries.claude_inputs[0]
+    assert "Jean Dupont" not in sent
+    assert "Monsieur" not in sent
+    assert "[nom]" in sent
 
 
 async def test_workflow_marks_failed_on_unsupported_mime(fake_boundaries):
@@ -125,6 +158,34 @@ async def test_workflow_marks_failed_on_unsupported_mime(fake_boundaries):
         )
 
     assert result["status"] == "failed"
-    row = fake_boundaries["req-bad"]
+    row = fake_boundaries.store["req-bad"]
     assert row["status"] == "failed"
     assert row["error_message"]
+    # Claude must not be called when extraction already failed.
+    assert fake_boundaries.claude_inputs == []
+
+
+async def test_workflow_marks_failed_when_provider_not_configured(fake_boundaries, monkeypatch):
+    # Extraction/redaction succeed, but the summarize step has no Azure config:
+    # the workflow must end in `failed` with the provider error, having advanced
+    # through extracting -> summarizing first.
+    monkeypatch.setattr(settings, "azure_ai_inference_endpoint", "")
+    monkeypatch.setattr(settings, "azure_ai_api_key", "")
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        result = await _run(
+            env,
+            SummarizeDocumentInput(
+                request_id="req-noprov",
+                storage_path="folder/doc.txt",
+                mime_type="text/plain",
+                original_filename="doc.txt",
+            ),
+        )
+
+    assert result["status"] == "failed"
+    row = fake_boundaries.store["req-noprov"]
+    assert row["status"] == "failed"
+    assert "not configured" in row["error_message"].lower()
+    statuses = [fields["status"] for (_id, fields) in fake_boundaries.updates if "status" in fields]
+    assert statuses == ["extracting", "summarizing", "failed"]

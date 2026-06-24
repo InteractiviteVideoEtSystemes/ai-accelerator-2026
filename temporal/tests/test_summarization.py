@@ -26,6 +26,21 @@ def test_redact_title_prefixed_name():
     assert REDACTION_PLACEHOLDER in out
 
 
+def test_redact_preserves_surrounding_text():
+    # Only the name is replaced; the rest of the sentence is untouched. A broken
+    # implementation that returns "" or strips extra words would fail here.
+    out = redact_personal_names("Le rapport de Monsieur Jean Dupont est complet.")
+    assert out == f"Le rapport de {REDACTION_PLACEHOLDER} est complet."
+
+
+def test_redact_untitled_name_is_left_to_model_prompt():
+    # By design the deterministic pass only removes title-prefixed names; an
+    # untitled "Jean Dupont" is intentionally left for the model prompt to handle.
+    # This test pins that documented behavior so a future change is a conscious one.
+    text = "Jean Dupont a signé le contrat."
+    assert redact_personal_names(text) == text
+
+
 def test_redact_handles_abbreviated_titles():
     assert redact_personal_names("Contact: M. Pierre Martin") == f"Contact: {REDACTION_PLACEHOLDER}"
     assert redact_personal_names("Mme Claire Bernard a signé.") == f"{REDACTION_PLACEHOLDER} a signé."
@@ -77,6 +92,17 @@ def test_chunk_hard_splits_oversized_paragraph():
     assert len(chunks) > 1
     for chunk in chunks:
         assert len(chunk.encode("utf-8")) <= max_bytes
+
+
+def test_chunk_preserves_all_words_without_loss():
+    # Map-reduce correctness depends on chunking neither dropping nor duplicating
+    # content. Verify every source word appears across the chunks exactly as often.
+    text = "\n\n".join(f"paragraphe numero {i} avec du contenu" for i in range(40))
+    chunks = chunk_text(text, 48)
+    assert len(chunks) > 1
+    source_words = text.split()
+    chunk_words = " ".join(chunks).split()
+    assert sorted(chunk_words) == sorted(source_words)
 
 
 def test_chunk_invalid_budget_raises():

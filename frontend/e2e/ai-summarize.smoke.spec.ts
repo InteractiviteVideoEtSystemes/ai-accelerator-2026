@@ -11,8 +11,12 @@ const SUMMARY_TEXT = 'This is the generated English summary of the document.';
 
 test.describe('AI summarize (offline smoke)', () => {
   test('uploads a document and renders the completed summary', async ({ page }) => {
+    let uploadHit = false;
+    let createBody: Record<string, unknown> | null = null;
+
     // Mock the private Storage bucket upload (supabase-js -> /storage/v1/object/...).
     await page.route('**/storage/v1/object/**', async (route) => {
+      uploadHit = true;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -25,6 +29,7 @@ test.describe('AI summarize (offline smoke)', () => {
       const req = route.request();
       const url = req.url();
       if (req.method() === 'POST' && url.endsWith('/summaries')) {
+        createBody = req.postDataJSON();
         await route.fulfill({
           status: 201,
           contentType: 'application/json',
@@ -67,6 +72,16 @@ test.describe('AI summarize (offline smoke)', () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(SUMMARY_TEXT)).toBeVisible();
     await expect(page.getByRole('button', { name: /Copy/i })).toBeVisible();
+
+    // The UI must honor the real upload + Edge Function contract, not just render
+    // a mocked summary: assert the document was uploaded and the create payload.
+    expect(uploadHit).toBe(true);
+    expect(createBody).toMatchObject({
+      original_filename: 'sample.txt',
+      mime_type: 'text/plain',
+    });
+    expect(typeof (createBody as Record<string, unknown>)?.storage_path).toBe('string');
+    expect((createBody as Record<string, unknown>)?.size_bytes).toBeGreaterThan(0);
   });
 
   test('shows a Retry control when the request fails', async ({ page }) => {

@@ -50,11 +50,14 @@ test.describe('AI summarize (live, gated by RUN_AI_E2E=1)', () => {
     const summaryHeading = page.getByRole('heading', { name: /English summary/i });
     await expect(summaryHeading).toBeVisible({ timeout: 150_000 });
 
-    // The rendered summary should contain text and must not leak the redacted name.
+    // The rendered summary should contain text and must not leak any redacted name.
     const summaryBlock = page.locator('.whitespace-pre-wrap');
     await expect(summaryBlock).toBeVisible();
     const text = (await summaryBlock.textContent())?.trim() ?? '';
     expect(text.length).toBeGreaterThan(20);
-    expect(text).not.toMatch(/Dupont/i);
+    // No personal-name tokens from the source document may appear.
+    expect(text).not.toMatch(/Dupont|Jean|Monsieur/i);
+    // The output must read as English, not echo the French source phrasing.
+    expect(text).not.toMatch(/Compte rendu|trimestriel|embauches/i);
   });
 });

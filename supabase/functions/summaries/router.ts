@@ -45,7 +45,6 @@ async function handleCreate(admin: SummariesDb, req: Request): Promise<Response>
   const storagePath = String(payload.storage_path ?? "").trim();
   const originalFilename = String(payload.original_filename ?? "").trim();
   const mimeType = String(payload.mime_type ?? "").trim();
-  const sizeBytes = Number(payload.size_bytes ?? 0);
 
   if (!storagePath) return json({ error: "storage_path is required" }, 400);
   if (!originalFilename) {
@@ -54,7 +53,17 @@ async function handleCreate(admin: SummariesDb, req: Request): Promise<Response>
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
     return json({ error: `Unsupported mime_type: ${mimeType}` }, 400);
   }
-  if (Number.isFinite(sizeBytes) && sizeBytes > MAX_INPUT_BYTES) {
+  // `size_bytes` is part of the documented payload and gates the 512 KB cap
+  // server-side; reject missing/non-numeric/negative values rather than coercing
+  // them to 0 (which would silently bypass the limit).
+  if (payload.size_bytes === undefined || payload.size_bytes === null) {
+    return json({ error: "size_bytes is required" }, 400);
+  }
+  const sizeBytes = Number(payload.size_bytes);
+  if (!Number.isFinite(sizeBytes) || sizeBytes < 0) {
+    return json({ error: "size_bytes must be a non-negative number" }, 400);
+  }
+  if (sizeBytes > MAX_INPUT_BYTES) {
     return json(
       { error: `File exceeds the ${MAX_INPUT_BYTES} byte limit` },
       413,

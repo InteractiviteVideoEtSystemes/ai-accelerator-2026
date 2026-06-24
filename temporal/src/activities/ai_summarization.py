@@ -40,6 +40,14 @@ def extract_text(storage_path: str, mime_type: str, original_filename: str) -> s
         text = summarization.extract_text_from_bytes(data, mime_type, original_filename)
     except ValueError as exc:
         raise ApplicationError(str(exc), type="UnsupportedMimeType", non_retryable=True)
+    # Defense in depth: a small compressed PDF/DOCX can expand to far more text than
+    # the raw-byte cap allowed, so re-check the decoded length before summarizing.
+    if len(text.encode("utf-8")) > settings.summarization_max_input_bytes:
+        raise ApplicationError(
+            f"Extracted text exceeds the {settings.summarization_max_input_bytes} byte limit",
+            type="InputTooLarge",
+            non_retryable=True,
+        )
     if not text.strip():
         raise ApplicationError(
             "No extractable text found (scanned/image documents are not supported)",

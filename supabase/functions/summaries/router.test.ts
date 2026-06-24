@@ -19,6 +19,10 @@ function makeFakeDb(results: Result[]) {
     inserts: [] as unknown[],
     updates: [] as unknown[],
     from: [] as string[],
+    selects: [] as unknown[],
+    eqs: [] as Array<[string, unknown]>,
+    orders: [] as unknown[],
+    limits: [] as number[],
   };
   let i = 0;
   const next = (): Result =>
@@ -34,10 +38,22 @@ function makeFakeDb(results: Result[]) {
       calls.updates.push(v);
       return builder;
     },
-    select: () => builder,
-    eq: () => builder,
-    order: () => builder,
-    limit: () => Promise.resolve(next()),
+    select(cols?: unknown) {
+      calls.selects.push(cols ?? null);
+      return builder;
+    },
+    eq(col: string, val: unknown) {
+      calls.eqs.push([col, val]);
+      return builder;
+    },
+    order(col: unknown, opts: unknown) {
+      calls.orders.push([col, opts]);
+      return builder;
+    },
+    limit: (n: number) => {
+      calls.limits.push(n);
+      return Promise.resolve(next());
+    },
     single: () => Promise.resolve(next()),
   });
 
@@ -60,7 +76,7 @@ function postCreate(body: unknown): Request {
   });
 }
 
-Deno.test("POST create: valid payload returns 201 and inserts status=uploaded", async () => {
+Deno.test("POST create: valid payload returns 201 and inserts the full row", async () => {
   const { db, calls } = makeFakeDb([{ data: { id: "abc", status: "uploaded" } }]);
   const handle = createRouter(db);
   const res = await handle(
@@ -75,7 +91,68 @@ Deno.test("POST create: valid payload returns 201 and inserts status=uploaded", 
   const json = await res.json();
   assertEquals(json.id, "abc");
   assertEquals(calls.from, ["document_summaries"]);
-  assertEquals((calls.inserts[0] as Record<string, unknown>).status, "uploaded");
+  // The whole insert contract matters, not just status: a regression dropping
+  // storage_path/original_filename/mime_type must fail this test.
+  assertEquals(calls.inserts[0], {
+    storage_path: "documents/abc.txt",
+    original_filename: "abc.txt",
+    mime_type: VALID_MIME,
+    status: "uploaded",
+  });
+});
+
+Deno.test("POST create: missing size_bytes returns 400", async () => {
+  const { db } = makeFakeDb([]);
+  const res = await createRouter(db)(
+    postCreate({
+      storage_path: "documents/a.txt",
+      original_filename: "a.txt",
+      mime_type: VALID_MIME,
+    }),
+  );
+  assertEquals(res.status, 400);
+  assertStringIncludes((await res.json()).error, "size_bytes is required");
+});
+
+Deno.test("POST create: non-numeric size_bytes returns 400", async () => {
+  const { db } = makeFakeDb([]);
+  const res = await createRouter(db)(
+    postCreate({
+      storage_path: "documents/a.txt",
+      original_filename: "a.txt",
+      mime_type: VALID_MIME,
+      size_bytes: "not-a-number",
+    }),
+  );
+  assertEquals(res.status, 400);
+  assertStringIncludes((await res.json()).error, "size_bytes must be a non-negative number");
+});
+
+Deno.test("POST create: negative size_bytes returns 400", async () => {
+  const { db } = makeFakeDb([]);
+  const res = await createRouter(db)(
+    postCreate({
+      storage_path: "documents/a.txt",
+      original_filename: "a.txt",
+      mime_type: VALID_MIME,
+      size_bytes: -1,
+    }),
+  );
+  assertEquals(res.status, 400);
+  assertStringIncludes((await res.json()).error, "non-negative");
+});
+
+Deno.test("POST create: size_bytes exactly at the cap is accepted", async () => {
+  const { db } = makeFakeDb([{ data: { id: "edge", status: "uploaded" } }]);
+  const res = await createRouter(db)(
+    postCreate({
+      storage_path: "documents/edge.txt",
+      original_filename: "edge.txt",
+      mime_type: VALID_MIME,
+      size_bytes: MAX_INPUT_BYTES,
+    }),
+  );
+  assertEquals(res.status, 201);
 });
 
 Deno.test("POST create: missing storage_path returns 400", async () => {
@@ -164,7 +241,7 @@ Deno.test("POST retry: non-failed request returns 409", async () => {
   assertStringIncludes((await res.json()).error, "Only failed requests");
 });
 
-Deno.test("POST retry: failed request returns 200 and resets to uploaded", async () => {
+Deno.test("POST retry: failed request returns 200 and resets the full row", async () => {
   const { db, calls } = makeFakeDb([
     { data: { id: "abc", status: "failed" } },
     { data: { id: "abc", status: "uploaded" } },
@@ -173,8 +250,15 @@ Deno.test("POST retry: failed request returns 200 and resets to uploaded", async
     new Request(`${BASE}/abc/retry`, { method: "POST" }),
   );
   assertEquals(res.status, 200);
-  assertEquals((calls.updates[0] as Record<string, unknown>).status, "uploaded");
-  assertEquals((calls.updates[0] as Record<string, unknown>).workflow_id, null);
+  // The update must target this id only (not every failed row)...
+  assertEquals(calls.eqs, [["id", "abc"], ["id", "abc"]]);
+  // ...and must clear the previous run's fields, not just flip status.
+  assertEquals(calls.updates[0], {
+    status: "uploaded",
+    workflow_id: null,
+    summary: null,
+    error_message: null,
+  });
 });
 
 Deno.test("POST retry: unknown id returns 404", async () => {

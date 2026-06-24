@@ -14,11 +14,14 @@ from src.config import settings
 
 
 class _FakeResponse:
-    def __init__(self, *, json_data=None, content=b""):
+    def __init__(self, *, json_data=None, content=b"", raise_exc=None):
         self._json = json_data
         self.content = content
+        self._raise = raise_exc
 
     def raise_for_status(self):
+        if self._raise is not None:
+            raise self._raise
         return None
 
     def json(self):
@@ -104,3 +107,37 @@ def test_update_row_issues_patch_by_id(recording):
     assert recording.last["verb"] == "PATCH"
     assert "id=eq.req-9" in recording.last["url"]
     assert recording.last["json"] == {"status": "completed"}
+
+
+def _http_error() -> httpx.HTTPStatusError:
+    return httpx.HTTPStatusError(
+        "boom",
+        request=httpx.Request("GET", "http://sb:54321"),
+        response=httpx.Response(500),
+    )
+
+
+def test_download_object_propagates_http_error(recording):
+    recording.get_response = _FakeResponse(raise_exc=_http_error())
+    with pytest.raises(httpx.HTTPStatusError):
+        supabase_rest.download_object("folder/file.pdf")
+
+
+def test_fetch_pending_propagates_http_error(recording):
+    recording.get_response = _FakeResponse(raise_exc=_http_error())
+    with pytest.raises(httpx.HTTPStatusError):
+        supabase_rest.fetch_pending()
+
+
+def test_update_row_propagates_http_error(recording):
+    recording.patch_response = _FakeResponse(raise_exc=_http_error())
+    with pytest.raises(httpx.HTTPStatusError):
+        supabase_rest.update_row("req-1", {"status": "failed"})
+
+
+def test_claim_request_propagates_http_error(recording):
+    # A failed claim PATCH must raise (so the poller logs/retries), not be read as
+    # "claim lost" (which returning False would imply).
+    recording.patch_response = _FakeResponse(raise_exc=_http_error())
+    with pytest.raises(httpx.HTTPStatusError):
+        supabase_rest.claim_request("req-1", "summarize-req-1")

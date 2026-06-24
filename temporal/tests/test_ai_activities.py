@@ -83,6 +83,27 @@ def test_extract_text_rejects_empty_extraction(monkeypatch):
     assert exc.value.non_retryable is True
 
 
+def test_extract_text_rejects_oversized_extracted_text(monkeypatch):
+    # Raw bytes are under the cap, but the decoded/extracted text expands beyond it
+    # (e.g. a small compressed DOCX). The post-extraction guard must reject it.
+    monkeypatch.setattr(settings, "summarization_max_input_bytes", 50)
+    monkeypatch.setattr(supabase_rest, "download_object", lambda path: b"small zip bytes")
+    monkeypatch.setattr(
+        ai_summarization.summarization,
+        "extract_text_from_bytes",
+        lambda data, mime, name: "A" * 200,
+    )
+    with pytest.raises(ApplicationError) as exc:
+        ai_summarization.extract_text("p/doc.docx", ai_summarization.summarization.DOCX_MIME, "doc.docx")
+    assert exc.value.type == "InputTooLarge"
+    assert exc.value.non_retryable is True
+
+
 def test_redact_personal_names_activity(monkeypatch):
-    out = ai_summarization.redact_personal_names("Le rapport de Monsieur Jean Dupont.")
+    out = ai_summarization.redact_personal_names("Le rapport de Monsieur Jean Dupont est complet.")
+    # Assert the name is gone, the placeholder is present, and the rest is intact --
+    # not merely that one substring is absent (which "" would also satisfy).
     assert "Jean Dupont" not in out
+    assert "[nom]" in out
+    assert out.startswith("Le rapport de ")
+    assert out.endswith(" est complet.")

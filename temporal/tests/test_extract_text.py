@@ -88,3 +88,17 @@ def test_extract_txt_utf8():
 def test_extract_unsupported_mime_raises():
     with pytest.raises(ValueError):
         extract_text_from_bytes(b"data", "image/png", "x.png")
+
+
+def test_extract_malformed_docx_raises():
+    # A corrupt DOCX (not a valid zip) must raise rather than silently returning
+    # empty text. The real python-docx parser is exercised here.
+    with pytest.raises(Exception):
+        extract_text_from_bytes(b"this is not a docx zip", DOCX_MIME, "broken.docx")
+
+
+def test_extract_malformed_pdf_raises():
+    # A corrupt PDF must raise rather than silently returning empty text. The real
+    # pypdf parser is exercised here.
+    with pytest.raises(Exception):
+        extract_text_from_bytes(b"this is not a pdf", PDF_MIME, "broken.pdf")

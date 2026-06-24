@@ -31,12 +31,21 @@ def _row(request_id="r1"):
 
 
 async def test_poll_once_claims_then_starts_workflow(monkeypatch):
+    claims: list[tuple[str, str]] = []
+
+    def fake_claim(rid, wf):
+        claims.append((rid, wf))
+        return True
+
     monkeypatch.setattr(supabase_rest, "fetch_pending", lambda: [_row("r1")])
-    monkeypatch.setattr(supabase_rest, "claim_request", lambda rid, wf: True)
+    monkeypatch.setattr(supabase_rest, "claim_request", fake_claim)
 
     client = _FakeClient()
     await poller._poll_once(client)
 
+    # The claim must use the same workflow_id the workflow is started with --
+    # asserting only start_workflow would miss a wrong claim id.
+    assert claims == [("r1", "summarize-r1")]
     assert len(client.started) == 1
     started = client.started[0]
     assert started["id"] == "summarize-r1"
@@ -60,11 +69,19 @@ async def test_poll_once_skips_when_claim_lost(monkeypatch):
 
 
 async def test_poll_once_processes_each_pending_row(monkeypatch):
+    claims: list[tuple[str, str]] = []
+
+    def fake_claim(rid, wf):
+        claims.append((rid, wf))
+        return True
+
     monkeypatch.setattr(supabase_rest, "fetch_pending", lambda: [_row("r1"), _row("r2")])
-    monkeypatch.setattr(supabase_rest, "claim_request", lambda rid, wf: True)
+    monkeypatch.setattr(supabase_rest, "claim_request", fake_claim)
 
     client = _FakeClient()
     await poller._poll_once(client)
 
     ids = sorted(s["id"] for s in client.started)
     assert ids == ["summarize-r1", "summarize-r2"]
+    # Each row is claimed with its own matching workflow_id.
+    assert sorted(claims) == [("r1", "summarize-r1"), ("r2", "summarize-r2")]

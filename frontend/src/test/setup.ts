@@ -10,6 +10,8 @@ import { cleanup } from '@testing-library/react';
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // Prevent a stubbed global (e.g. fetch) from leaking into the next test.
+  vi.unstubAllGlobals();
 });
 
 if (!globalThis.crypto?.randomUUID) {
